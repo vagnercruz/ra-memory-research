@@ -1,18 +1,21 @@
-from PySide6.QtWidgets import QLabel
-from PySide6.QtWidgets import QMainWindow
-
-
 class MainWindow(QMainWindow):
-    """
-    Main application window.
-    """
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self):
 
-        self.setWindowTitle("RA Memory Research")
+        ...
 
-        self.setMinimumSize(1000, 700)
+        MenuBarBuilder.build(self)
 
-        label = QLabel("RA Memory Research", self)
-        label.move(20, 20)
+        self.setStatusBar(StatusBar())
+
+        self.setCentralWidget(Workspace())
+
+        self.addDockWidget(
+            Qt.LeftDockWidgetArea,
+            ProjectDock()
+        )
+
+        self.addDockWidget(
+            Qt.RightDockWidgetArea,
+            InspectorDock()
+        )
