@@ -86,16 +86,28 @@ abstraction in `ramr.infrastructure.memory` (PCSX2, BizHawk, DuckStation,
 RPCS3, ...). Upper layers depend only on the abstraction, so new emulators
 mean one new provider class, not changes across the app.
 
-**Project storage.** Each game is an independent, portable project
-directory: JSON for metadata (`project.json`, notes), SQLite for large
-datasets (snapshots, value histories).
+**Project storage (Sprint 2).** Each game is an independent, portable
+project directory: `project.json` for small human-readable metadata,
+`research.db` (SQLite) for large datasets, plus `snapshots/`, `exports/`,
+`notes/`, and `cache/` subdirectories. The project's root directory is
+derived from where it was opened and never stored in the file, so
+directories can be moved or shared freely. Database schema changes use
+append-only migrations tracked with SQLite's `user_version` pragma.
+`ProjectService` owns the open project and its database connection; the
+recent-projects list lives in a JSON file in the per-user data directory.
+
+**PySide6 wrapper lifetime.** Menu objects reached through temporary
+`actions()` traversals get invalidated when Python garbage-collects the
+intermediate wrappers. `MenuBarBuilder.build()` therefore returns a
+`MainMenus` container of direct references that `MainWindow` keeps alive;
+menus are always accessed through it, never by traversal.
 
 ## Module roadmap
 
 | Module | Status |
 | --- | --- |
 | Application shell (window, docks, menus, logging) | Done (Sprint 1) |
-| Project system (create/open/save portable projects) | Planned |
+| Project system (create/open/save portable projects) | Done (Sprint 2) |
 | Memory providers (PCSX2, BizHawk, DuckStation, RPCS3) | Planned |
 | Snapshot manager (full-RAM captures with events and notes) | Planned |
 | Comparison engine (changed/increased/decreased, bit/word/float/BCD) | Planned |

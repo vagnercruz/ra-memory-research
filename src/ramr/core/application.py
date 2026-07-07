@@ -1,4 +1,4 @@
-"""Application bootstrap: Qt application, logging, and main window."""
+"""Application bootstrap: Qt application, logging, services, and main window."""
 
 import logging
 import sys
@@ -8,10 +8,15 @@ from PySide6.QtCore import QStandardPaths
 from PySide6.QtWidgets import QApplication
 
 from ramr.core.settings import ApplicationSettings
+from ramr.infrastructure.filesystem.project_repository import ProjectRepository
+from ramr.infrastructure.filesystem.recent_projects import RecentProjectsStore
 from ramr.infrastructure.logging.configuration import configure_logging
+from ramr.services.project_service import ProjectService
 from ramr.ui.main_window import MainWindow
 
 logger = logging.getLogger(__name__)
+
+RECENT_PROJECTS_FILE_NAME = "recent_projects.json"
 
 
 class Application:
@@ -25,10 +30,16 @@ class Application:
         self.qt_application.setOrganizationName(self.settings.organization_name)
         self.qt_application.setApplicationVersion(self.settings.version)
 
-        configure_logging(self._data_directory())
+        data_directory = self._data_directory()
+        configure_logging(data_directory)
         logger.info("Starting %s %s", self.settings.application_name, self.settings.version)
 
-        self.main_window = MainWindow(self.settings)
+        self.project_service = ProjectService(
+            repository=ProjectRepository(),
+            recent_projects=RecentProjectsStore(data_directory / RECENT_PROJECTS_FILE_NAME),
+        )
+
+        self.main_window = MainWindow(self.settings, self.project_service)
 
     def run(self) -> int:
         """Show the main window, run the event loop, and return its exit code."""
