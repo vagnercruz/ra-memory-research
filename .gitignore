@@ -1,18 +1,26 @@
+# Python
 __pycache__/
 *.pyc
+*.egg-info/
 
+# Virtual environments
 .venv/
+.venv-*/
 
+# IDEs
 .vscode/
+.idea/
 
+# Build artifacts
 dist/
-
 build/
-
 *.spec
 
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# Local data
 *.db
-
 *.sqlite
-
-.idea/
+logs/

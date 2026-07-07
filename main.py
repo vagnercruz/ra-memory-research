@@ -1,10 +1,9 @@
-from src.core.application import Application
+"""Development launcher for RA Memory Research.
 
+Requires an editable install first: ``pip install -e ".[dev]"``.
+"""
 
-def main() -> None:
-    app = Application()
-    app.run()
-
+from ramr.core.application import main
 
 if __name__ == "__main__":
     main()

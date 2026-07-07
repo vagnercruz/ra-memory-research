@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ra-memory-research"
+description = "Memory research assistant for RetroAchievements developers."
+readme = "README.md"
+requires-python = ">=3.13"
+authors = [{ name = "Vagner Cruz" }]
+keywords = ["retroachievements", "emulator", "memory", "research"]
+dynamic = ["version"]
+dependencies = [
+    "PySide6>=6.8",
+    "pyqtgraph>=0.13",
+    "numpy>=2.0",
+    "psutil>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=25.1",
+    "ruff>=0.9",
+    "pytest>=8.3",
+    "pytest-qt>=4.4",
+]
+
+[project.gui-scripts]
+ramr = "ramr.core.application:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "ramr.__version__" }
+
+[tool.black]
+line-length = 100
+target-version = ["py313"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific rules
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
