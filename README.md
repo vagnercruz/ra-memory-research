@@ -55,4 +55,6 @@ overview, layering rules, and module roadmap.
 
 ## Status
 
-Early development — Sprint 1 (application shell and project foundation) complete.
+Early development — Sprint 2 complete: portable per-game projects can be
+created, opened, and reopened from a recent-projects list, each with its
+own SQLite research database.
