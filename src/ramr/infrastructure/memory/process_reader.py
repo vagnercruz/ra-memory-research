@@ -41,9 +41,7 @@ class ProcessMemoryReader:
             self.close()
 
         kernel32 = self._load_kernel32()
-        handle = kernel32.OpenProcess(
-            _PROCESS_VM_READ | _PROCESS_QUERY_INFORMATION, False, pid
-        )
+        handle = kernel32.OpenProcess(_PROCESS_VM_READ | _PROCESS_QUERY_INFORMATION, False, pid)
         if not handle:
             raise MemoryReadError(
                 f"Could not open process {pid} (error {ctypes.get_last_error()})."
