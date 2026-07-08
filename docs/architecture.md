@@ -81,10 +81,41 @@ handlers instead of stacking them, so reconfiguration (and tests) stay
 safe. The path comes from Qt's `QStandardPaths` in the bootstrap layer, so
 the logging module itself stays Qt-free.
 
-**Memory providers.** Emulator access will go through a `MemoryProvider`
-abstraction in `ramr.infrastructure.memory` (PCSX2, BizHawk, DuckStation,
-RPCS3, ...). Upper layers depend only on the abstraction, so new emulators
-mean one new provider class, not changes across the app.
+**Memory providers (Sprint 3).** Emulator access goes through the
+`MemoryProvider` port, defined in `ramr.domain.memory_provider`. The
+service layer depends only on that abstraction; every concrete adapter
+lives in `ramr.infrastructure.memory`, so a new emulator is one new
+provider class, not a change rippling across the app.
+
+The infrastructure splits the work into small, swappable collaborators
+behind the `MemoryReader` and `ProcessLocator` ports:
+
+- `ProcessMemoryReader` — reads host process memory through the Win32
+  `OpenProcess`/`ReadProcessMemory` API (ctypes). Loaded lazily so the
+  module stays importable off Windows.
+- `EmulatorProcessLocator` — finds a process by executable name via
+  psutil; the process iterator is injectable for tests.
+- `BufferMemoryReader` and `FakeMemoryProvider` — in-memory
+  implementations for offline development and deterministic tests.
+- `ProcessMemoryProvider` — base class that wires a locator and reader
+  together, translating console-relative *guest* addresses to *host*
+  addresses via a subclass-provided base.
+
+`EmulatorService` owns at most one connection at a time and exposes a
+three-state lifecycle (`DISCONNECTED`, `CONNECTED`, `LOST`); the window
+polls `refresh_connection()` on a timer to notice an emulator that was
+closed underneath it.
+
+**Guest RAM base calibration (honest limitation).** RetroAchievements
+addresses are console-relative, but emulators allocate guest RAM on the
+host heap, so the base address is not a fixed constant. `Pcsx2Provider`
+therefore exposes a `guest_base_override` and, without it, raises a clear
+"not calibrated" error rather than reading from a guessed address that
+would return garbage. Automatic base resolution (signature scan or the
+emulator's memory-exposure API) is planned for a later sprint. Everything
+around this point — reader, locator, address translation, service, and
+UI — is real and fully tested; only the emulator-specific base offset
+awaits calibration against a live process.
 
 **Project storage (Sprint 2).** Each game is an independent, portable
 project directory: `project.json` for small human-readable metadata,
@@ -108,7 +139,7 @@ menus are always accessed through it, never by traversal.
 | --- | --- |
 | Application shell (window, docks, menus, logging) | Done (Sprint 1) |
 | Project system (create/open/save portable projects) | Done (Sprint 2) |
-| Memory providers (PCSX2, BizHawk, DuckStation, RPCS3) | Planned |
+| Memory providers and emulator connection | Done (Sprint 3); PCSX2 base awaits calibration |
 | Snapshot manager (full-RAM captures with events and notes) | Planned |
 | Comparison engine (changed/increased/decreased, bit/word/float/BCD) | Planned |
 | Watch list (real-time values, labels, history, charts) | Planned |

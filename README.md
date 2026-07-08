@@ -55,6 +55,12 @@ overview, layering rules, and module roadmap.
 
 ## Status
 
-Early development — Sprint 2 complete: portable per-game projects can be
-created, opened, and reopened from a recent-projects list, each with its
-own SQLite research database.
+Early development — Sprint 3 complete: the application connects to a
+running emulator through a pluggable memory-provider layer and reads its
+memory, with a live connection indicator in the status bar. Guest RAM
+base resolution for real emulators (starting with PCSX2) still requires
+calibration; an in-memory provider supports offline development in the
+meantime.
+
+Earlier sprints: portable per-game projects with their own SQLite
+research database (Sprint 2) on a layered application shell (Sprint 1).
