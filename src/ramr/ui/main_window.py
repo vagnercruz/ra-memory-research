@@ -3,14 +3,17 @@
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths, Qt
+from PySide6.QtCore import QStandardPaths, Qt, QTimer
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox
 
 from ramr.core import constants
 from ramr.core.settings import ApplicationSettings
-from ramr.domain.exceptions import ProjectError
+from ramr.domain.exceptions import EmulatorError, ProjectError
+from ramr.domain.memory import ConnectionState
+from ramr.services.emulator_service import EmulatorService
 from ramr.services.project_service import ProjectService
+from ramr.ui.dialogs.connect_emulator_dialog import ConnectEmulatorDialog
 from ramr.ui.dialogs.new_project_dialog import NewProjectDialog
 from ramr.ui.docks.inspector_dock import InspectorDock
 from ramr.ui.docks.project_dock import ProjectDock
@@ -20,19 +23,33 @@ from ramr.ui.workspace import Workspace
 
 logger = logging.getLogger(__name__)
 
+# How often to check that a connected emulator is still reachable.
+CONNECTION_POLL_INTERVAL_MS = 1000
+
+_CONNECTION_DESCRIPTIONS = {
+    ConnectionState.DISCONNECTED: "No emulator connected",
+    ConnectionState.LOST: "Connection lost",
+}
+
 
 class MainWindow(QMainWindow):
     """Top-level window hosting the central workspace and dockable panels.
 
-    Presentation only: project actions delegate to :class:`ProjectService`
-    and the window updates its views from the result.
+    Presentation only: project and emulator actions delegate to their
+    services and the window updates its views from the result.
     """
 
-    def __init__(self, settings: ApplicationSettings, project_service: ProjectService) -> None:
+    def __init__(
+        self,
+        settings: ApplicationSettings,
+        project_service: ProjectService,
+        emulator_service: EmulatorService,
+    ) -> None:
         super().__init__()
 
         self.settings = settings
         self.project_service = project_service
+        self.emulator_service = emulator_service
 
         self.setMinimumSize(constants.WINDOW_MINIMUM_WIDTH, constants.WINDOW_MINIMUM_HEIGHT)
 
@@ -49,7 +66,16 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.inspector_dock)
 
         self.menus = MenuBarBuilder.build(self)
+
+        self._connection_timer = QTimer(self)
+        self._connection_timer.setInterval(CONNECTION_POLL_INTERVAL_MS)
+        self._connection_timer.timeout.connect(self.poll_connection)
+        self._connection_timer.start()
+
         self._refresh_project_views()
+        self._update_connection_views()
+
+    # -- Project actions ---------------------------------------------------
 
     def create_new_project(self) -> None:
         """Ask for project data and create it through the service."""
@@ -65,7 +91,7 @@ class MainWindow(QMainWindow):
                 notes=dialog.notes,
             )
         except ProjectError as error:
-            self._show_project_error("Could not create the project.", error)
+            self._show_error("Could not create the project.", error)
             return
 
         self._refresh_project_views()
@@ -84,7 +110,7 @@ class MainWindow(QMainWindow):
         try:
             project = self.project_service.open_project(directory)
         except ProjectError as error:
-            self._show_project_error("Could not open the project.", error)
+            self._show_error("Could not open the project.", error)
             return
 
         self._refresh_project_views()
@@ -96,10 +122,51 @@ class MainWindow(QMainWindow):
         self._refresh_project_views()
         self.status_bar.showMessage("Project closed")
 
+    # -- Emulator actions --------------------------------------------------
+
+    def connect_emulator(self) -> None:
+        """Choose an emulator and connect to it through the service."""
+        dialog = ConnectEmulatorDialog(self.emulator_service, parent=self)
+        if dialog.exec() != ConnectEmulatorDialog.DialogCode.Accepted:
+            return
+
+        emulator_name = dialog.selected_emulator_name
+        if emulator_name is None:
+            return
+
+        try:
+            process = self.emulator_service.connect(emulator_name)
+        except EmulatorError as error:
+            self._show_error("Could not connect to the emulator.", error)
+            self._update_connection_views()
+            return
+
+        self._update_connection_views()
+        self.status_bar.showMessage(f"Connected to {emulator_name} (pid {process.pid})")
+
+    def disconnect_emulator(self) -> None:
+        """Disconnect the current emulator."""
+        self.emulator_service.disconnect()
+        self._update_connection_views()
+        self.status_bar.showMessage("Emulator disconnected")
+
+    def poll_connection(self) -> None:
+        """Detect a dropped emulator connection and update the views."""
+        previous_state = self.emulator_service.connection_state
+        current_state = self.emulator_service.refresh_connection()
+        if current_state != previous_state:
+            self._update_connection_views()
+            if current_state is ConnectionState.LOST:
+                self.status_bar.showMessage("Emulator connection lost")
+
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 (Qt naming)
-        """Persist the open project before the window closes."""
+        """Release resources before the window closes."""
+        self._connection_timer.stop()
+        self.emulator_service.disconnect()
         self.project_service.close_project()
         super().closeEvent(event)
+
+    # -- View updates ------------------------------------------------------
 
     def _refresh_project_views(self) -> None:
         project = self.project_service.current_project
@@ -110,7 +177,17 @@ class MainWindow(QMainWindow):
             self.setWindowTitle(f"{project.name} — {self.settings.application_name}")
             self.project_dock.show_project(project)
 
-    def _show_project_error(self, summary: str, error: ProjectError) -> None:
+    def _update_connection_views(self) -> None:
+        state = self.emulator_service.connection_state
+        if state is ConnectionState.CONNECTED:
+            description = f"Connected: {self.emulator_service.connected_emulator_name}"
+        else:
+            description = _CONNECTION_DESCRIPTIONS[state]
+
+        self.status_bar.set_connection_state(description)
+        self.menus.disconnect_emulator_action.setEnabled(state is ConnectionState.CONNECTED)
+
+    def _show_error(self, summary: str, error: Exception) -> None:
         logger.warning("%s %s", summary, error)
         QMessageBox.warning(self, self.settings.application_name, f"{summary}\n\n{error}")
 

@@ -8,8 +8,12 @@ from pytestqt.qtbot import QtBot
 
 from ramr.core import constants
 from ramr.core.settings import ApplicationSettings
+from ramr.domain.memory import ConnectionState
 from ramr.infrastructure.filesystem.project_repository import ProjectRepository
 from ramr.infrastructure.filesystem.recent_projects import RecentProjectsStore
+from ramr.infrastructure.memory.fake_provider import FakeMemoryProvider
+from ramr.infrastructure.memory.registry import MemoryProviderRegistry
+from ramr.services.emulator_service import EmulatorService
 from ramr.services.project_service import ProjectService
 from ramr.ui.main_window import MainWindow
 from ramr.ui.menu_bar import MenuBarBuilder
@@ -26,8 +30,22 @@ def project_service(tmp_path: Path) -> Iterator[ProjectService]:
 
 
 @pytest.fixture
-def main_window(qtbot: QtBot, project_service: ProjectService) -> MainWindow:
-    window = MainWindow(ApplicationSettings(), project_service)
+def fake_provider() -> FakeMemoryProvider:
+    return FakeMemoryProvider(emulator_name="Fake", memory=bytes(range(16)))
+
+
+@pytest.fixture
+def emulator_service(fake_provider: FakeMemoryProvider) -> EmulatorService:
+    return EmulatorService(MemoryProviderRegistry([fake_provider]))
+
+
+@pytest.fixture
+def main_window(
+    qtbot: QtBot,
+    project_service: ProjectService,
+    emulator_service: EmulatorService,
+) -> MainWindow:
+    window = MainWindow(ApplicationSettings(), project_service, emulator_service)
     qtbot.addWidget(window)
     return window
 
@@ -51,7 +69,7 @@ def test_shell_widgets_are_installed(main_window: MainWindow) -> None:
 def test_menu_bar_contains_expected_menus(main_window: MainWindow) -> None:
     menu_titles = [action.text() for action in main_window.menuBar().actions()]
 
-    assert menu_titles == ["&File", "&View", "&Help"]
+    assert menu_titles == ["&File", "&Emulator", "&View", "&Help"]
 
 
 def test_view_menu_toggles_dock_visibility(main_window: MainWindow, qtbot: QtBot) -> None:
@@ -124,3 +142,49 @@ def test_recent_menu_shows_placeholder_when_empty(main_window: MainWindow) -> No
     actions = recent_menu.actions()
     assert [action.text() for action in actions] == ["No recent projects"]
     assert not actions[0].isEnabled()
+
+
+def test_disconnect_action_starts_disabled(main_window: MainWindow) -> None:
+    assert not main_window.menus.disconnect_emulator_action.isEnabled()
+    assert main_window.status_bar.connection_label.text() == "No emulator connected"
+
+
+def test_connecting_emulator_updates_status_and_menu(
+    main_window: MainWindow, emulator_service: EmulatorService
+) -> None:
+    emulator_service.connect("Fake")
+
+    main_window._update_connection_views()
+
+    assert main_window.menus.disconnect_emulator_action.isEnabled()
+    assert main_window.status_bar.connection_label.text() == "Connected: Fake"
+
+
+def test_disconnect_emulator_resets_views(
+    main_window: MainWindow, emulator_service: EmulatorService
+) -> None:
+    emulator_service.connect("Fake")
+    main_window._update_connection_views()
+
+    main_window.disconnect_emulator()
+
+    assert not main_window.menus.disconnect_emulator_action.isEnabled()
+    assert main_window.status_bar.connection_label.text() == "No emulator connected"
+    assert emulator_service.connection_state is ConnectionState.DISCONNECTED
+
+
+def test_poll_connection_reports_lost_emulator(
+    main_window: MainWindow,
+    emulator_service: EmulatorService,
+    fake_provider: FakeMemoryProvider,
+) -> None:
+    emulator_service.connect("Fake")
+    main_window._update_connection_views()
+
+    # The emulator process vanishes underneath the connection.
+    fake_provider.disconnect()
+    main_window.poll_connection()
+
+    assert emulator_service.connection_state is ConnectionState.LOST
+    assert main_window.status_bar.connection_label.text() == "Connection lost"
+    assert not main_window.menus.disconnect_emulator_action.isEnabled()

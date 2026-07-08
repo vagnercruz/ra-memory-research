@@ -14,17 +14,21 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class MainMenus:
-    """Direct references to the menus of the main window.
+    """Direct references to the menus and stateful actions of the main window.
 
     The window must keep this container alive: PySide6 invalidates menu
     wrappers reached through temporary ``actions()`` traversals, so menus
-    are always accessed through these references instead.
+    are always accessed through these references instead. Actions whose
+    enabled state changes at runtime are held here for the same reason.
     """
 
     file_menu: QMenu
     recent_projects_menu: QMenu
+    emulator_menu: QMenu
     view_menu: QMenu
     help_menu: QMenu
+    connect_emulator_action: QAction
+    disconnect_emulator_action: QAction
 
 
 class MenuBarBuilder:
@@ -68,6 +72,18 @@ class MenuBarBuilder:
         exit_action.triggered.connect(window.close)
         file_menu.addAction(exit_action)
 
+        emulator_menu = menu_bar.addMenu("&Emulator")
+
+        connect_emulator_action = QAction("&Connect…", window)
+        connect_emulator_action.setShortcut("Ctrl+E")
+        connect_emulator_action.triggered.connect(window.connect_emulator)
+        emulator_menu.addAction(connect_emulator_action)
+
+        disconnect_emulator_action = QAction("&Disconnect", window)
+        disconnect_emulator_action.setEnabled(False)
+        disconnect_emulator_action.triggered.connect(window.disconnect_emulator)
+        emulator_menu.addAction(disconnect_emulator_action)
+
         view_menu = menu_bar.addMenu("&View")
         view_menu.addAction(window.project_dock.toggleViewAction())
         view_menu.addAction(window.inspector_dock.toggleViewAction())
@@ -80,8 +96,11 @@ class MenuBarBuilder:
         return MainMenus(
             file_menu=file_menu,
             recent_projects_menu=recent_menu,
+            emulator_menu=emulator_menu,
             view_menu=view_menu,
             help_menu=help_menu,
+            connect_emulator_action=connect_emulator_action,
+            disconnect_emulator_action=disconnect_emulator_action,
         )
 
     @staticmethod
